@@ -1,0 +1,65 @@
+def falsi_method(f,a0,b0,tol,niter = 30):
+    err = abs(a0-b0)
+    iters = 0
+    while abs(err)>tol and iters<niter:
+        c = (a0*f(b0)-b0*f(a0))/(f(b0)-f(a0))
+        if f(a0)*f(c)>0:
+            a0 = c
+        elif f(a0)*f(c)<0:
+            b0 = c
+        else:
+            return c
+        iters = iters+1
+        err = f(c)
+    return c,err,iters
+
+def implied_vol2(S0,K,r,T,mkt_price,a0 = 0.0,b0 = 1.0,niters = 30,tol = 0.0001):
+    r"""
+    Implied volatility of an option
+    """
+    f = lambda sig:vanilla_option(S0,K,r,sig,T)[0]-mkt_price
+    return falsi_method(f,a0,b0,tol = tol,niter = niters)
+#%%
+def vol_smile2(S0,strikes,r,T,mkt_prices,lim1  = 0.0):
+    r"""
+    Inputs:
+        
+    S0: the current underlying asset price. Type. float.  
+    
+    strikes = The strikes prices for the available quoted options. (a 1D array/list)
+    
+    mkt_prices = market prices (quoted market prices) (a 1D array)
+    
+    T = the time to maturity 
+    
+    Output:
+        List + lambda function. The corresponding implied volatilities 
+        and the interpolating function
+    """
+    import numpy as np
+    vols = [implied_vol2(S0,strikes[i],r,T,mkt_prices[i],a0=lim1)[0] for i in range(len(strikes))]
+    f = lambda x:np.interp(x,strikes,vols)
+    return vols,f
+
+def vol_term_struct2(S0,K,r,times,mkt_prices,lim1 = 0.0):
+    r"""
+    This time we derive the volatility term structure when given a certain strike 
+    price (K), time to maturities (times) and quoted market prices (mkt_prices)
+    
+    The inputs and outputs are the same as before. 
+    """
+    import numpy as np
+    vols = [implied_vol2(S0,K,r,times[i],mkt_prices[i],a0 = lim1)[0] for i in range(len(times))]
+    f = lambda x:np.interp(x,times,vols)
+    return vols,f
+
+def vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.0,lim2 = 1.0):
+    r"""
+    Inputs: 
+    Mkt_prices: 2D array
+    """
+    vols = [vol_term_struct2(S0,strikes[i],r,times,mkt_prices[i],lim1)[0] for i in \
+        range(len(strikes))]
+    import scipy.interpolate as interp
+    f = interp.interp2d(times,strikes,vols)
+    return vols,f
