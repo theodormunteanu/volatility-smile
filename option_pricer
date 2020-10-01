@@ -1,0 +1,146 @@
+import numpy as np
+import scipy.stats as stats
+#%%
+def falsi_method(f,a0,b0,tol,niter = 30):
+    r"""
+    Numerical method used to find the roots of a scalar function, that is the roots of 
+    the equation f(x) = 0. 
+    
+    It has the advantage that it converges always if the side limits are picked up correctly,
+    unlike Newton-Raphson, and converges faster than all the other numerical methods 
+    depending on bracketing intervals. 
+    """
+    err = abs(a0-b0)
+    iters = 0
+    while abs(err)>tol and iters<niter:
+        c = (a0*f(b0)-b0*f(a0))/(f(b0)-f(a0))
+        if f(a0)*f(c)>0:
+            a0 = c
+        elif f(a0)*f(c)<0:
+            b0 = c
+        else:
+            return c
+        iters = iters+1
+        err = f(c)
+    return c,err,iters
+#%%
+class option:
+    r"""
+    -------------------
+    We define the financial option class with the following attributes:
+    
+        The underlying asset price $S_0$, 
+        $K$ = strike price, 
+        $r$ = interest rate. (we assume a flat curve) 
+        sig = the theoretical volatility of the underlying asset(sometimes implied)
+        $T$ = lifetime of the option. 
+        $t$ = moment of valuation
+        opt: can be call/put 
+        
+    This class contains the following methods:
+        
+        delta_BS: delta under the Black & Scholes method
+        gamma_BS: second order sensitivity w.r.t underlying asset price  
+        nabla_BS: the sensitivity w.r.t strike price. 
+                  Useful when discussing volatility smiles
+        vega_BS: the sensitivity of option price w.r.t implied vol
+        theta_BS: the sensitivity w.r.t remaining lifetime
+        vanna_BS: cross-sensitivity w.r.t asset price and volatility
+        implied_vol: implied volatility from the quoted market price. 
+    """
+    def __init__(self,S0,K,r,sig,T,t = 0, opt = 'call'):
+        self.S0,self.K, self.r,self.sig,self.T,self.t,self.opt = S0,K,r,sig,T,t,opt
+        
+    def price_BS(self):
+        r"""
+        Black Scholes price of options. 
+        """
+        S0,K,r,sig,T,t = self.S0,self.K,self.r,self.sig,self.T,self.t
+        import numpy as np
+        import scipy.stats as stats
+        if self.opt in ['call','C','Call','c']:
+            if t<T:
+                d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+                d2 = d1 - sig*np.sqrt(T-t)
+                price = S0*stats.norm.cdf(d1)-K*np.exp(-r*(T-t))*stats.norm.cdf(d2)
+                
+            elif t==T:
+                d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+                d2 = d1 - sig*np.sqrt(T-t)
+                price = max([S0-K,0])
+                
+            else:
+                price = 0
+        
+        elif self.opt in ['put','Put','P','p']:
+            if t<T:
+                d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+                d2 = d1 - sig*np.sqrt(T-t)
+                price = K*np.exp(-r*(T-t))*stats.norm.cdf(-d2)-S0*stats.norm.cdf(-d1)
+            
+            elif t==T:
+                d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+                d2 = d1 - sig*np.sqrt(T-t)
+                price = max([K-S0,0])
+            
+            else:
+                price = 0
+        
+        return price
+    
+    def delta_BS(self):
+        S0,K,r,sig,T,t = self.S0,self.K,self.r,self.sig,self.T,self.t
+        if t<T:
+            d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+            return stats.norm.cdf(d1) if self.opt in ['call','Call'] else \
+                    stats.norm.cdf(d1)-1
+    
+    def gamma_BS(self):
+        S0,K,r,sig,T,t = self.S0,self.K,self.r,self.sig,self.T,self.t
+        if t<T:
+            d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+            gamma = stats.norm.pdf(d1)*1/(S0*sig*np.sqrt(T-t))
+            return gamma
+        else: 
+            return 0
+        
+    def nabla_BS(self):
+        S0,K,r,sig,T,t = self.S0,self.K,self.r,self.sig,self.T,self.t
+        if t<T:
+            d2 = (np.log(S0/K)+(r-sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+            return -np.exp(-r*(T-t))*stats.norm.cdf(d2) if self.opt in ['call','Call'] \
+                    else np.exp(-r*(T-t))*stats.norm.cdf(-d2) 
+        elif t==T:
+            return -1 if self.opt in ['call','Call'] else 1
+            
+            
+    def vega_BS(self):
+        S0,K,r,sig,T,t = self.S0,self.K,self.r,self.sig,self.T,self.t
+        if t<T:
+            d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+            return S0*np.sqrt(T-t)*np.exp(-d1**2/2)*1/np.sqrt(2*np.pi)
+        else:
+            return 0
+        
+    def theta_BS(self):
+        S0,K,r,sig,T,t = self.S0,self.K,self.r,self.sig,self.T,self.t
+        d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+        d2 = d1 - sig*np.sqrt(T-t)
+        if self.opt in ['Call','call']:
+            return -S0*stats.norm.pdf(d1)*sig/(2*np.sqrt(T-t)) - \
+                    r*K*np.exp(-r*(T-t))*stats.norm.cdf(d2)
+        elif self.opt in ['Put','put']:
+            return -S0*stats.norm.pdf(-d1)*sig/(2*np.sqrt(T-t)) - \
+                    r*K*np.exp(-r*(T-t))*stats.norm.cdf(-d2)
+        
+    def implied_vol(self,mkt_price,a0 = 0.0,b0 = 1.0,niters = 30,tol = 0.0001):
+        def f(x):
+            self.sig = x
+            return self.price_BS()-mkt_price
+        return falsi_method(f,a0,b0,tol = tol,niter = niters)
+   
+    def vanna_BS(self):
+        S0,K,r,sig,T,t = self.S0,self.K,self.r,self.sig,self.T,self.t
+        d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+        d2 = d1 - sig*np.sqrt(T-t)
+        return stats.norm.pdf(d1)*d2/sig
