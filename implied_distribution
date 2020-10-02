@@ -1,0 +1,45 @@
+def implied_distribution(S0,r,T,vols,strikes):
+    r"""
+    Inputs:
+    =============
+    
+    $S_0$: the underlying asset price
+    
+    r: interest rate
+    
+    T: options common lifetime
+    
+    vols: implied volatilities
+    
+    strikes: strike prices
+    
+    Output: the distribution probabilities between the strikes and outside the strikes
+    
+    Example: For $K_1,K_2,K_3,K_4 = 50,55,60,65$ we will find 
+    $P(S_T)<K_1, P(S_T)\in $[K_i,K_{i+1}], P(S_T>K_4)$. \\ 
+    """
+    import numpy as np
+    g = [0]*(len(strikes)+1)
+    for i in range(len(strikes)-1):
+        g[i+1] = np.exp(r*T)*(vanilla_option(S0,strikes[i],r,vols[i],T)[0]-\
+                 2*vanilla_option(S0,(strikes[i]+strikes[i+1])/2,r,\
+                (vols[i]+vols[i+1])/2,T)[0] + vanilla_option(S0,strikes[i+1],r,\
+                vols[i+1],T)[0])/((strikes[i+1]-strikes[i])/2)**2
+    g[0],g[-1] = (1-sum(g[1:len(strikes)-1]))/2,(1-sum(g[1:len(strikes)-1]))/2
+    return g
+
+def implied_distribution2(S0,r,T,mkt_prices,strikes):
+    r"""
+    Inputs:
+    
+    The same as in implied_distribution1 but instead of vols you get market prices.
+    
+    mkt_prices: the market prices of the options having the strikes in the last input. 
+    
+    Output:
+        implied distribution weights:
+
+    """
+    from digital_option import implied_vol
+    vols = [implied_vol(S0,strikes[i],r,T,mkt_prices[i]) for i in range(len(strikes))]
+    return implied_distribution(S0,r,T,vols,strikes)
