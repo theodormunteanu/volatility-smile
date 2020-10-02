@@ -1,0 +1,90 @@
+import numpy as np
+def deriv(xvals,fvals):
+    r"""
+    We compute the numerical first order derivatives given 2 arrays of data"
+    Input:
+    xvals = the input for x argument (1d array/list)
+    
+    fvals = the inputs for y argument (1d array/list)
+    
+    Output:
+    
+        array of derivatives
+    """
+    if len(fvals)!=len(xvals):
+        raise TypeError ("the two lists must have the same length")
+    fp_vals = [(fvals[1]-fvals[0])/(xvals[1]-xvals[0]) if i==0 \
+            else (fvals[-1]-fvals[-2])/(xvals[-1]-xvals[-2]) if i == len(xvals)-1 \
+            else 1/2*((fvals[i+1]-fvals[i])/(xvals[i+1]-xvals[i]) + \
+                      (fvals[i]-fvals[i-1])/(xvals[i]-xvals[i-1])) for i in range(len(xvals))]
+    import numpy as np
+    g = lambda t:np.interp(t,xvals,fp_vals)
+    return fp_vals,g
+
+def deriv_second(xvals,fvals):
+    r"""
+    We compute the numerical second order derivatives given 2 arrays of data"
+    Input:
+    xvals = the input for x argument
+    
+    fvals = the inputs for y argument
+    
+    Output:
+    
+        array of derivatives
+    """
+    fs_vals = [(fvals[2]-2*fvals[1]+fvals[0])/((xvals[2]-xvals[1])*(xvals[1]-xvals[0])) if i==0 \
+               else (fvals[i+1]-2*fvals[i]+fvals[i-1])/((xvals[i+1]-xvals[i])*\
+                     (xvals[i]-xvals[i-1])) if 0<i and i<len(fvals)-1 else \
+                     (fvals[-1]-2*fvals[-2]+fvals[-3])/((xvals[-1]-xvals[-2])*(xvals[-2]-xvals[-3]))\
+                     for i in range(len(fvals))]
+    import numpy as np
+    g = lambda t:np.interp(t,xvals,fs_vals)
+    return fs_vals,g
+#%%
+class digital_option_smile:
+    def __init__(self,S0,K,r,T,strikes,times,mkt_prices,t=0,option_type = 'call'):
+        self.S0,self.K,self.r,self.T,self.strikes,self.t = S0,K,r,T,strikes,t
+        self.times,self.mkt_prices = times,mkt_prices
+        self.opt = option_type
+    
+    def price(self):
+        S0,K,r,T,strikes,times,mkt_prices,t = self.S0,self.K,self.r,self.T,\
+                 self.strikes,self.times,self.mkt_prices,self.t
+        from vol_smile_surface import vol_surf2
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        sig = f(T,K)[0]
+        o = option(S0,K,r,sig,T,t,opt = 'call')
+        sigs = [f(T,strikes[i])[0] for i in range(len(strikes))]
+        g = deriv(strikes,sigs)[1]
+        return -o.nabla_BS()-o.vega_BS()*g(K) if self.opt in ['call','Call'] \
+               else np.exp(-r*T)*(1+o.nabla_BS()+o.vega_BS()*g(K))
+      
+    def delta_smile(self):
+        S0,K,r,T,strikes,times,mkt_prices,t = self.S0,self.K,self.r,self.T,\
+                 self.strikes,self.times,self.mkt_prices,self.t
+        from vol_smile_surface import vol_surf2
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        sig = f(T,K)[0]
+        sigs = [f(T,strikes[i])[0] for i in range(len(strikes))]
+        moneyness = [strikes[i]/S0 for i in range(len(strikes))]
+        d = deriv(moneyness,sigs)[1]
+        do = digital_option(S0,K,r,sig,T,t,R = 1)
+        return do.price_dg_BS_CoN()[1] - do.vega_BS_CoN()*d(K/S0)*K/S0**2
+
+    def gamma_smile(self):
+        S0,K,r,T,strikes,times,mkt_prices,t = self.S0,self.K,self.r,self.T,\
+                 self.strikes,self.times,self.mkt_prices,self.t
+        from vol_smile_surface import vol_surf2
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        sig = f(T,K)[0]
+        sigs = [f(T,strikes[i])[0] for i in range(len(strikes))]
+        moneyness = [strikes[i]/S0 for i in range(len(strikes))]
+        d = deriv(moneyness,sigs)[1]
+        ds = deriv_second(moneyness,sigs)
+        do = digital_option(S0,K,r,sig,T,t,R = 1) 
+        gamma_BS = do.price_dg_BS_CoN()[2]
+        Q1 = -do.vanna_BS_CoN()*d(K/S0)*K/S0**2
+        Q2 = do.vega_BS_CoN()*ds(K/S0)*K**2/S0**4
+        Q3 = do.vega_BS_CoN()*d(K/S0)*(2*K)/(S0**3)
+        return gamma_BS-Q1+Q2+Q3
