@@ -1,0 +1,42 @@
+def vol_surf_dupire(mkt_prices,times,strikes,r,q=0):
+    import numpy as np
+    if len(times)<3 or len(strikes)<3:
+        raise IndexError('Not enough market data')
+    if np.shape(mkt_prices)[0] != len(times) or np.shape(mkt_prices)[1] != len(strikes):
+        raise IndexError('the size of mkt_prices and the lengths of times and strikes \
+                         do not correspond')
+    def cprime_t(i,j):
+        if 0<=i and i<len(times)-1:
+            return (mkt_prices[i+1][j]-mkt_prices[i][j])/(times[i+1]-times[i])
+        elif i==len(times)-1:
+            return (mkt_prices[i][j]-mkt_prices[i-1][j])/(times[i]-times[i-1])
+        else:
+            raise IndexError('The time index must be between {0} and {1}'.format(0,\
+                             len(times)-1))
+    def csecond_K(i,j):
+        if j==0:
+            return (mkt_prices[i][j+2]-2*mkt_prices[i][j+1]+mkt_prices[i][j])/\
+              ((strikes[2]-strikes[1])*(strikes[1]-strikes[0]))
+        elif j==len(strikes)-1:
+            return (mkt_prices[i][j]-2*mkt_prices[i][j-1]+mkt_prices[i][j-2])/\
+              ((strikes[-1]-strikes[-2])*(strikes[-2]-strikes[-3]))
+        elif 1<=j and j<len(strikes)-1:
+            return (mkt_prices[i][j+1]-2*mkt_prices[i][j]+mkt_prices[i][j-1])/\
+              ((strikes[j+1]-strikes[j])*(strikes[j]-strikes[j-1]))
+        else:
+            raise IndexError('the strike price index must be between {0} and {1}'.format(\
+                             0,len(strikes)-1))
+    def imp_vol_dupire(i,j):
+        if i<0 or i>=len(times) or j<0 or j>len(strikes):
+            raise IndexError('i must be between 0 and {0} and j must be between 0 and \
+                             {1}'.format(len(times),len(strikes)))
+        a =  2 * cprime_t(i,j)/csecond_K(i,j)
+        return 1/strikes[i] * np.sqrt(a) if a>0 else 0
+    datas = np.array([[imp_vol_dupire(i,j) for i in range(len(times))] \
+                       for j in range(len(strikes))]).T
+    import scipy.interpolate as interp
+    f = interp.interp2d(times,strikes,datas)
+    g = lambda t,x:f(t,x*np.exp((r-q)*t))
+    datas2 = [[g(times[i],strikes[j]) for j in range(np.shape(datas)[1])] \
+               for i in range(np.shape(datas)[0])]
+    return datas,g,datas2
