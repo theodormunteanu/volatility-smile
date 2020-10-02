@@ -1,0 +1,115 @@
+class option_smile:
+    r"""Price, delta, gamma under volatility smile
+    Inputs:
+        
+    S0  = underlying asset price
+    
+    strikes = strike prices of the available quoted options
+    
+    times = remaining lifetimes of the quoted options
+    
+    mkt_prices = the quoted market prices of options from which we will get the 
+                 vol. surface
+    
+    
+    """
+    
+    def __init__(self,S0,K,r,T,strikes,times,mkt_prices,t = 0,opt = 'call'):
+        self.S0,self.K,self.r,self.T,self.strikes,self.times = S0,K,r,T,strikes,times
+        self.mkt_prices,self.t = mkt_prices,t
+        self.opt = opt
+        
+    def price_smile(self):
+        S0,K,r,T,strikes,times,mkt_prices,t = self.S0,self.K,self.r,self.T,\
+                                      self.strikes,self.times,self.mkt_prices,self.t
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        sig = f(T,K)[0]
+        o = option(S0,K,r,sig,T,t)
+        return o.price_BS()
+    
+    def delta_smile(self):
+        S0,K,r,T,t = self.S0,self.K,self.r,self.T,self.t
+        strikes,times = self.strikes,self.times
+        mkt_prices = self.mkt_prices
+        from vol_smile_surface import vol_surf2
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        "vol_surf2 returns a matrix of volatilities and a 2D interpolator"
+        sig = f(T,K)[0]
+        sigs = [f(T,strikes[i])[0] for i in range(len(strikes))]
+        moneyness = [strikes[i]/S0 for i in range(len(strikes))]
+        d = deriv(moneyness,sigs)[1]
+        o = option(S0,K,r,sig,T,t)
+        delta_sm = o.delta_BS()+o.vega_BS()*d(K)*(-K/S0**2)
+        return delta_sm
+    
+    def gamma_smile(self):
+        S0,K,r,T,t = self.S0,self.K,self.r,self.T,self.t
+        strikes,times = self.strikes,self.times
+        mkt_prices = self.mkt_prices
+        from vol_smile_surface import vol_surf2
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        sig = f(T,K)[0]
+        sigs = [f(T,strikes[i])[0] for i in range(len(strikes))]
+        moneyness = [strikes[i]/S0 for i in range(len(strikes))]
+        d = deriv(moneyness,sigs)[1]
+        ds = deriv_second(moneyness,sigs)[1]
+        o = option(S0,K,r,sig,T,t)
+        gamma_sm = o.gamma_BS() + o.vanna_BS()*d(K)*(-K/S0**2)+o.vega_BS()*ds(K)*(K**2/S0**4)+ \
+                   + o.vega_BS()*d(K)*(2*K)/(S0**3)
+        return gamma_sm
+#%%
+class option_smile_portfolio:
+    def __init__(self,S0,strikes2,r,times2,strikes,times,mkt_prices,\
+                 exposures,types,t = 0):
+        r"""
+        strikes2 = the strikes of the portfolio options
+        
+        times2  = the maturities of the portfolio options
+        
+        strikes = the strikes of the available quoted options
+        
+        times = the maturities of the available quoted options
+        """
+        self.S0,self.strikes2,self.r,self.times2 = S0,strikes2,r,times2
+        self.strikes,self.times,self.mkt_prices,self.exposures = \
+             strikes,times,mkt_prices,exposures
+        self.t,self.types = t,types
+    
+    def price_smile(self):
+        S0,strikes2,r,times2,strikes,times,mkt_prices,exposures,t,types = \
+        self.S0,self.strikes2,self.r,self.times2,self.strikes,self.times,\
+        self.mkt_prices,self.exposures,self.t,self.types
+        import numpy as np
+        from vol_smile_surface import vol_surf2
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        sigs = [f(times2[i],strikes2[i])[0] for i in range(len(strikes2))]
+        options = [option(S0,strikes2[i],r,sigs[i],times2[i],t,opt = 'call' \
+                          if types[i] in ['c','C'] else 'put' ) \
+                   for i in range(len(strikes2))]
+        return np.dot(exposures,[options[i].price_BS() for i in range(len(options))])
+      
+    def delta_smile(self):
+        S0,strikes2,r,times2,strikes,times,mkt_prices,exposures,t,types = \
+        self.S0,self.strikes2,self.r,self.times2,self.strikes,self.times,\
+        self.mkt_prices,self.exposures,self.t,self.types
+        import numpy as np
+        from vol_smile_surface import vol_surf2
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        sigs = [f(times2[i],strikes2[i])[0] for i in range(len(strikes2))]
+        options = [option(S0,strikes2[i],r,sigs[i],times2[i],t,opt = 'call' \
+                          if types[i] in ['c','C'] else 'put' ) \
+                   for i in range(len(strikes2))]
+        return np.dot(exposures,[options[i].delta_BS() for i in range(len(options))])
+    
+    def gamma_smile(self):
+        S0,strikes2,r,times2,strikes,times,mkt_prices,exposures,t,types = \
+        self.S0,self.strikes2,self.r,self.times2,self.strikes,self.times,\
+        self.mkt_prices,self.exposures,self.t,self.types
+        import numpy as np
+        from vol_smile_surface import vol_surf2
+        vols,f = vol_surf2(S0,strikes,r,times,mkt_prices,lim1 = 0.01)
+        sigs = [f(times2[i],strikes2[i])[0] for i in range(len(strikes2))]
+        options = [option(S0,strikes2[i],r,sigs[i],times2[i],t,opt = 'call' \
+                          if types[i] in ['c','C'] else 'put' ) \
+                   for i in range(len(strikes2))]
+        return np.dot(exposures,[options[i].gamma_BS() for i in range(len(options))])
