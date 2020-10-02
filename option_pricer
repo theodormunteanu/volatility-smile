@@ -44,13 +44,18 @@ class option:
         nabla_BS: the sensitivity w.r.t strike price. 
                   Useful when discussing volatility smiles
         vega_BS: the sensitivity of option price w.r.t implied vol
-        theta_BS: the sensitivity w.r.t remaining lifetime
+        theta_BS: the sensitivity w.r.t time to maturity
         vanna_BS: cross-sensitivity w.r.t asset price and volatility
         implied_vol: implied volatility from the quoted market price. 
     """
     def __init__(self,S0,K,r,sig,T,t = 0, opt = 'call'):
         self.S0,self.K, self.r,self.sig,self.T,self.t,self.opt = S0,K,r,sig,T,t,opt
-        
+    
+    def payoff(self):
+        K = self.K
+        opt = self.opt
+        return lambda x:max([x-K,0]) if opt in ['call'] else lambda x:max([K-x,0])
+    
     def price_BS(self):
         r"""
         Black Scholes price of options. 
@@ -144,3 +149,107 @@ class option:
         d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
         d2 = d1 - sig*np.sqrt(T-t)
         return stats.norm.pdf(d1)*d2/sig
+
+#%%
+class option_portfolio:
+    def __init__(self,S0,strikes,r,sig,times,exposures,types,t = 0):
+        r"""
+        Inputs:
+        
+        S0: underlying asset price. (float)
+        
+        strikes: list of exercise prices. (list/numpy 1D array)
+        
+        exposures: the number of options of 
+        types: types of composing options. (string,optional)
+            By default all options are calls.
+            
+        Examples: 
+        
+        S0,strikes,r,sig,times = 100,[90,100,110],0,0.3,[1,1,1]
+        exposures,types = [1,-2,1],str('ccc')
+        1. O = option_portfolio(S0,strikes,r,sig,times,exposures,t,types)
+        means we have 3 options with strike prices = 90,100 and 110, their positions
+        are long (=1), and all options are call
+        
+        2. O = option_portfolio(S0,strikes,r,sig,times,exposures,t,str('ppp'))
+        means we have 3 put options instead of 3 calls. 
+        
+        3. 
+        
+        """
+        self.S0 = S0
+        self.strikes = strikes
+        self.r,self.sig,self.times = r,sig,times
+        self.exposures = exposures
+        self.t,self.types = t,types
+    
+    def payoff(self):
+        import numpy as np
+        S0,strikes,r,sig,times,exposures,t,types = self.S0,self.strikes,self.r,self.sig, \
+                    self.times,self.exposures,self.t,self.types
+        options = [option(S0,strikes[i],r,sig,times[i],t,opt = 'call' \
+                       if types[i] in ['c','C'] else 'put') for i in range(len(strikes))]
+        return lambda x:np.dot(exposures,[options[i].payoff()(x) for i in range(len(strikes))])
+        
+    def price_BS(self):
+        import numpy as np
+        S0,strikes,r,sig,times,exposures,t,types = self.S0,self.strikes,self.r,self.sig, \
+                    self.times,self.exposures,self.t,self.types
+        options = [option(S0,strikes[i],r,sig,times[i],t,opt = 'call' \
+                       if types[i] in ['c','C'] else 'put') for i in range(len(strikes))]
+        return np.dot(exposures,[options[i].price_BS() for i in range(len(options))])
+        
+    def delta_BS(self):
+        import numpy as np
+        S0,strikes,r,sig,times,exposures,t,types = self.S0,self.strikes,self.r,self.sig, \
+                    self.times,self.exposures,self.t,self.types
+        options = [option(S0,strikes[i],r,sig,times[i],t,opt = 'call' \
+                       if types[i] in ['c','C'] else 'put') for i in range(len(strikes))]
+        return np.dot([exposures[i] for i in range(len(exposures))],\
+                       [options[i].delta_BS() for i in range(len(options))])
+        
+    def gamma_BS(self):
+        import numpy as np
+        S0,strikes,r,sig,times,exposures,t,types = self.S0,self.strikes,self.r,self.sig, \
+                    self.times,self.exposures,self.t,self.types
+        options = [option(S0,strikes[i],r,sig,times[i],t,opt = 'call' \
+                       if types[i] in ['c','C'] else 'put') for i in range(len(strikes))]
+        return np.dot([exposures[i] for i in range(len(exposures))],\
+                       [options[i].gamma_BS() for i in range(len(options))])
+    
+    def theta_BS(self):
+        import numpy as np
+        S0,strikes,r,sig,times,exposures,t,types = self.S0,self.strikes,self.r,self.sig, \
+                    self.times,self.exposures,self.t,self.types
+        options = [option(S0,strikes[i],r,sig,times[i],t,opt = 'call' \
+                       if types[i] in ['c','C'] else 'put') for i in range(len(strikes))]
+        return np.dot([exposures[i] for i in range(len(exposures))],\
+                       [options[i].theta_BS() for i in range(len(options))])
+    
+    def nabla_BS(self):
+        import numpy as np
+        S0,strikes,r,sig,times,exposures,t,types = self.S0,self.strikes,self.r,self.sig, \
+                    self.times,self.exposures,self.t,self.types
+        options = [option(S0,strikes[i],r,sig,times[i],t,opt = 'call' \
+                       if types[i] in ['c','C'] else 'put') for i in range(len(strikes))]
+        return np.dot([exposures[i] for i in range(len(exposures))],\
+                       [options[i].nabla_BS() for i in range(len(options))])
+    
+    def vega_BS(self):
+        import numpy as np
+        S0,strikes,r,sig,times,exposures,t,types = self.S0,self.strikes,self.r,self.sig, \
+                    self.times,self.exposures,self.t,self.types
+        options = [option(S0,strikes[i],r,sig,times[i],t,opt = 'call' \
+                       if types[i] in ['c','C'] else 'put') for i in range(len(strikes))]
+        return np.dot([exposures[i] for i in range(len(exposures))],\
+                       [options[i].vega_BS() for i in range(len(options))])
+    
+    def vanna_BS(self):
+        import numpy as np
+        S0,strikes,r,sig,times,exposures,t,types = self.S0,self.strikes,self.r,self.sig, \
+                    self.times,self.exposures,self.t,self.types
+        options = [option(S0,strikes[i],r,sig,times[i],t,opt = 'call' \
+                       if types[i] in ['c','C'] else 'put') for i in range(len(strikes))]
+        return np.dot([exposures[i] for i in range(len(exposures))],\
+                       [options[i].vanna_BS() for i in range(len(options))])
