@@ -1,0 +1,75 @@
+class digital_option:
+    r"""
+    This class contains the price, delta and gamma for Cash-or-Nothing, asset-or-nothing
+    options. 
+    """
+    
+    def __init__(self,S0,K,r,sig,T,t = 0,R = 1, opt = 'call'):
+        r"""
+        Inputs: 
+        S0 = underlying asset price
+        
+        K = strike price
+        
+        r = zero rate (the zero curve is assumed flat)
+        
+        T = digital option lifetime
+        
+        t = time of evaluation
+        
+        R = rebate level, that is the cash paid off if $S_T>K$
+        """
+        self.S0,self.K,self.r,self.sig,self.T,self.t,self.R = S0,K,r,sig,T,t,R
+        self.opt = opt
+    
+    def price_dg_BS_CoN(self):
+        r"""
+        Outputs:
+            
+        price, delta and gamma of the Cash-or-Nothing 
+        """
+        
+        S0,K,r,sig,T,t,R = self.S0,self.K,self.r,self.sig,self.T,self.t,self.R
+        opt =self.opt
+        import numpy as np
+        import scipy.stats as stats
+        d1 = (np.log(S0/K)+(r+sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+        d2 = d1 - sig*np.sqrt(T-t)
+        price = stats.norm.cdf(d2)*np.exp(-r*(T-t))*R if opt in ['call','Call'] \
+               else stats.norm.cdf(-d2)*np.exp(-r*(T-t))*R
+        delta = stats.norm.pdf(d2)*1/(sig*np.sqrt(T-t)*S0)*np.exp(-r*(T-t))
+        res = np.exp(-d2**2/2)/(np.sqrt(2*np.pi)) * (-d2) * \
+          1/(S0**2 * sig**2 *(T-t))
+        gamma =  R * (res + stats.norm.pdf(d2)*(-1/(S0**2 * sig * np.sqrt(T-t))))*\
+                 np.exp(-r*(T-t))
+        return price,delta,gamma
+    
+    def price_dg_BS_AoN(self):
+        r"""
+        Outputs:
+            
+        price, delta and gamma of the Asset-or-Nothing option.
+        
+        An asset or nothing has the payoff:
+            $\phi(S_T) = \begin{cases}S_T,S_T>K \\ 0,S_T < K  \end{cases}$. 
+        """
+        S0,K,r,sig,T,t,R = self.S0,self.K,self.r,self.sig,self.T,self.t,self.R
+        c0 = K*self.price_BS_CoN(S0,K,r,sig,T,t,R)+vanilla_option(S0,K,r,sig,T,t)[0]
+        delta = K*binary_option(S0,K,r,sig,T,t)[1]+vanilla_option(S0,K,r,sig,T,t)[1]
+        gamma = K*binary_option(S0,K,r,sig,T,t)[2]+vanilla_option(S0,K,r,sig,T,t)[2]
+        return c0,delta,gamma
+    
+    def vega_BS_CoN(self):
+        import numpy as np
+        import scipy.stats as stats
+        S0,K,r,sig,T,t,R = self.S0,self.K,self.r,self.sig,self.T,self.t,self.R
+        d2 = (np.log(S0/K)+(r-sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+        return R*np.exp(-r*T)*stats.norm.pdf(d2)*(-sig-r+sig**2/2)*T/sig
+    
+    def vanna_BS_CoN(self):
+        import numpy as np
+        S0,K,r,sig,T,t,R = self.S0,self.K,self.r,self.sig,self.T,self.t,self.R
+        d2 = (np.log(S0/K)+(r-sig**2/2)*(T-t))/(sig*np.sqrt(T-t))
+        Q1 = np.exp(-r*T)*(sig+r-sig**2/2)*np.sqrt(T)*d2*np.exp(-d2**2/2)
+        Q2 = sig**2 * np.sqrt(2*np.pi)
+        return R*Q1/Q2
